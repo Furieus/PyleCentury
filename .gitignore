@@ -1,0 +1,26 @@
+# Python
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# C# / .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Build output
+release/
+publish/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.key
+*.pem
+appsettings.Production.json
