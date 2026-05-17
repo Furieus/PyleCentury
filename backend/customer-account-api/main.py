@@ -1,11 +1,8 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from dotenv import load_dotenv
-from supabase import create_client, Client
-
-load_dotenv()
+import httpx
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -13,7 +10,14 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
     raise RuntimeError("Missing Supabase environment variables.")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+SUPABASE_REST_URL = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
+
+HEADERS = {
+    "apikey": SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
 
 app = FastAPI(title="Pyle Century Customer Account API")
 
@@ -53,20 +57,48 @@ def make_prefix(text: str, length: int) -> str:
     return cleaned[:length].ljust(length, "X")
 
 
-def generate_account_code(city: str, business_name: str) -> str:
+async def supabase_get(table: str, params: dict | None = None):
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(
+            f"{SUPABASE_REST_URL}/{table}",
+            headers=HEADERS,
+            params=params
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.json()
+
+
+async def supabase_insert(table: str, payload: dict):
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(
+            f"{SUPABASE_REST_URL}/{table}",
+            headers=HEADERS,
+            json=payload
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.json()
+
+
+async def generate_account_code(city: str, business_name: str) -> str:
     city_prefix = make_prefix(city, 3)
     business_prefix = make_prefix(business_name, 3)
-
     prefix = f"{city_prefix}-{business_prefix}"
 
-    existing = (
-        supabase.table("customer_accounts")
-        .select("account_code")
-        .like("account_code", f"{prefix}-%")
-        .execute()
+    existing = await supabase_get(
+        "customer_accounts",
+        {
+            "select": "account_code",
+            "account_code": f"like.{prefix}-%"
+        }
     )
 
-    next_number = len(existing.data) + 1
+    next_number = len(existing) + 1
     return f"{prefix}-{next_number:04d}"
 
 
@@ -78,9 +110,18 @@ def health_check():
     }
 
 
+@app.get("/health")
+def health():
+    return {
+        "status": "ok"
+    }
+
+
 @app.post("/customers")
-def create_customer(customer: CustomerCreate):
-    account_code = generate_account_code(customer.city, customer.business_name)
+async def create_customer(customer: CustomerCreate):
+    account_code = await generate_account_code(customer.city, customer.business_name)
+
+    now = datetime.now(timezone.utc).isoformat()
 
     account_payload = {
         "account_code": account_code,
@@ -105,16 +146,16 @@ def create_customer(customer: CustomerCreate):
         "pallet_jack_required": customer.pallet_jack_required,
 
         "is_hazmat": customer.is_hazmat,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
+        "created_at": now,
+        "updated_at": now,
     }
 
-    result = supabase.table("customer_accounts").insert(account_payload).execute()
+    inserted_customer = await supabase_insert("customer_accounts", account_payload)
 
-    if not result.data:
+    if not inserted_customer:
         raise HTTPException(status_code=500, detail="Failed to create customer account.")
 
-    customer_id = result.data[0]["id"]
+    customer_id = inserted_customer[0]["id"]
 
     if customer.is_hazmat:
         hazmat_payload = {
@@ -125,10 +166,10 @@ def create_customer(customer: CustomerCreate):
             "container_type": customer.container_type,
             "proper_shipping_name": customer.proper_shipping_name,
             "placard_required": customer.placard_required,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": now,
         }
 
-        supabase.table("customer_hazmat_profiles").insert(hazmat_payload).execute()
+        await supabase_insert("customer_hazmat_profiles", hazmat_payload)
 
     return {
         "id": customer_id,
@@ -139,28 +180,29 @@ def create_customer(customer: CustomerCreate):
 
 
 @app.get("/customers/{account_code}")
-def get_customer(account_code: str):
-    result = (
-        supabase.table("customer_accounts")
-        .select("*")
-        .eq("account_code", account_code)
-        .single()
-        .execute()
+async def get_customer(account_code: str):
+    customers = await supabase_get(
+        "customer_accounts",
+        {
+            "select": "*",
+            "account_code": f"eq.{account_code}"
+        }
     )
 
-    if not result.data:
+    if not customers:
         raise HTTPException(status_code=404, detail="Customer not found.")
 
-    customer_id = result.data["id"]
+    customer = customers[0]
 
-    hazmat = (
-        supabase.table("customer_hazmat_profiles")
-        .select("*")
-        .eq("customer_account_id", customer_id)
-        .execute()
+    hazmat_profiles = await supabase_get(
+        "customer_hazmat_profiles",
+        {
+            "select": "*",
+            "customer_account_id": f"eq.{customer['id']}"
+        }
     )
 
     return {
-        "customer": result.data,
-        "hazmat_profiles": hazmat.data
+        "customer": customer,
+        "hazmat_profiles": hazmat_profiles
     }

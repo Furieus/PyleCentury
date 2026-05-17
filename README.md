@@ -1,33 +1,19 @@
 # Pyle Century
 
-Pyle Century is a suite of internal logistics tools for dock operations, customer accounts, billing support, route sequencing, and freight visibility.
+Pyle Century is a suite of internal logistics tools.
 
-## Apps
+## Current modules
 
-### Dock Commander
-Dock visibility, doors, racks, trailers, activity, hazmat indicators, and operational dashboards.
+- Customer Account API
+- Supabase database schema
+- Future Dock Commander desktop/mobile apps
+- Future Route Sequencer
+- Future Billing integration
 
-### Customer Accounts
-Customer master file, account code generation, customer restrictions, and hazmat profiles.
+## Current architecture
 
-### Billing
-Future billing/customer lookup integration.
-
-### Route Sequencer
-Future delivery sequencing and route ordering.
-
-## Backend
-
-Python FastAPI services that connect the C# desktop/mobile apps to Supabase.
-
-## Database
-
-Supabase/PostgreSQL schema, seed data, and migrations.
-
-## Structure
-
-apps/
-backend/
-database/
-shared/
-docs/
+C# Desktop / Mobile Apps
+        ↓
+Python FastAPI Backend on Render
+        ↓
+Supabase PostgreSQL

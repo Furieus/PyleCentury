@@ -1,17 +1,33 @@
 # Pyle Century Customer Account API
 
-Python FastAPI backend for customer account creation, lookup, restrictions, and hazmat profiles.
+FastAPI backend for customer account creation, lookup, restrictions, and hazmat profiles.
 
-## Local setup
+## Render setup
 
-python -m venv .venv
-.venv\Scripts\activate
+Render settings:
+
+Root Directory:
+backend/customer-account-api
+
+Build Command:
 pip install -r requirements.txt
-python -m uvicorn main:app --reload
 
-## Environment variables
+Start Command:
+uvicorn main:app --host 0.0.0.0 --port $PORT
 
-Create a .env file locally, but do not commit it.
+Environment Variables:
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
 
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+## Test URLs
+
+After deployment:
+
+/
+returns service status.
+
+/docs
+opens FastAPI Swagger API testing page.
+
+/health
+returns a basic health check.

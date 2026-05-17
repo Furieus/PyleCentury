@@ -1,25 +1,8 @@
-Write-Host "Setting up Pyle Century project structure..." -ForegroundColor Cyan
+Write-Host "Setting up clean Pyle Century Render-first backend..." -ForegroundColor Cyan
 
 $folders = @(
-    "apps/dock-commander/desktop",
-    "apps/dock-commander/mobile",
-
-    "apps/customer-accounts/desktop",
-
-    "apps/billing/desktop",
-
-    "apps/route-sequencer/desktop",
-
     "backend/customer-account-api",
-    "backend/dock-commander-api",
-    "backend/billing-api",
-
-    "database/supabase/migrations",
-
-    "shared/models",
-    "shared/icons",
-    "shared/branding",
-
+    "database/supabase",
     "docs"
 )
 
@@ -30,37 +13,23 @@ foreach ($folder in $folders) {
 @"
 # Pyle Century
 
-Pyle Century is a suite of internal logistics tools for dock operations, customer accounts, billing support, route sequencing, and freight visibility.
+Pyle Century is a suite of internal logistics tools.
 
-## Apps
+## Current modules
 
-### Dock Commander
-Dock visibility, doors, racks, trailers, activity, hazmat indicators, and operational dashboards.
+- Customer Account API
+- Supabase database schema
+- Future Dock Commander desktop/mobile apps
+- Future Route Sequencer
+- Future Billing integration
 
-### Customer Accounts
-Customer master file, account code generation, customer restrictions, and hazmat profiles.
+## Current architecture
 
-### Billing
-Future billing/customer lookup integration.
-
-### Route Sequencer
-Future delivery sequencing and route ordering.
-
-## Backend
-
-Python FastAPI services that connect the C# desktop/mobile apps to Supabase.
-
-## Database
-
-Supabase/PostgreSQL schema, seed data, and migrations.
-
-## Structure
-
-apps/
-backend/
-database/
-shared/
-docs/
+C# Desktop / Mobile Apps
+        ↓
+Python FastAPI Backend on Render
+        ↓
+Supabase PostgreSQL
 "@ | Set-Content "README.md"
 
 @"
@@ -70,6 +39,8 @@ docs/
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # C# / .NET
 bin/
@@ -91,6 +62,276 @@ Thumbs.db
 *.pem
 appsettings.Production.json
 "@ | Set-Content ".gitignore"
+
+@"
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+httpx
+"@ | Set-Content "backend/customer-account-api/requirements.txt"
+
+@"
+services:
+  - type: web
+    name: pyle-century-customer-account-api
+    env: python
+    rootDir: backend/customer-account-api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port `$PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+"@ | Set-Content "backend/customer-account-api/render.yaml"
+
+@"
+import os
+from datetime import datetime, timezone
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import httpx
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError("Missing Supabase environment variables.")
+
+SUPABASE_REST_URL = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
+
+HEADERS = {
+    "apikey": SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
+
+app = FastAPI(title="Pyle Century Customer Account API")
+
+
+class CustomerCreate(BaseModel):
+    business_name: str
+    address1: str
+    address2: str | None = None
+    city: str
+    state: str
+    zip_code: str
+    phone: str | None = None
+    contact_name: str | None = None
+    contact_email: str | None = None
+
+    requires_liftgate: bool = False
+    requires_straight_truck: bool = False
+    appointment_required: bool = False
+    limited_access: bool = False
+    call_before_delivery: bool = False
+    inside_delivery: bool = False
+    dock_available: bool = False
+    forklift_available: bool = False
+    pallet_jack_required: bool = False
+
+    is_hazmat: bool = False
+    un_number: str | None = None
+    hazmat_class: str | None = None
+    packing_group: str | None = None
+    container_type: str | None = None
+    proper_shipping_name: str | None = None
+    placard_required: bool = False
+
+
+def make_prefix(text: str, length: int) -> str:
+    cleaned = "".join(ch for ch in text.upper() if ch.isalnum())
+    return cleaned[:length].ljust(length, "X")
+
+
+async def supabase_get(table: str, params: dict | None = None):
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(
+            f"{SUPABASE_REST_URL}/{table}",
+            headers=HEADERS,
+            params=params
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.json()
+
+
+async def supabase_insert(table: str, payload: dict):
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(
+            f"{SUPABASE_REST_URL}/{table}",
+            headers=HEADERS,
+            json=payload
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.json()
+
+
+async def generate_account_code(city: str, business_name: str) -> str:
+    city_prefix = make_prefix(city, 3)
+    business_prefix = make_prefix(business_name, 3)
+    prefix = f"{city_prefix}-{business_prefix}"
+
+    existing = await supabase_get(
+        "customer_accounts",
+        {
+            "select": "account_code",
+            "account_code": f"like.{prefix}-%"
+        }
+    )
+
+    next_number = len(existing) + 1
+    return f"{prefix}-{next_number:04d}"
+
+
+@app.get("/")
+def health_check():
+    return {
+        "service": "Pyle Century Customer Account API",
+        "status": "online"
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok"
+    }
+
+
+@app.post("/customers")
+async def create_customer(customer: CustomerCreate):
+    account_code = await generate_account_code(customer.city, customer.business_name)
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    account_payload = {
+        "account_code": account_code,
+        "business_name": customer.business_name,
+        "address1": customer.address1,
+        "address2": customer.address2,
+        "city": customer.city,
+        "state": customer.state,
+        "zip_code": customer.zip_code,
+        "phone": customer.phone,
+        "contact_name": customer.contact_name,
+        "contact_email": customer.contact_email,
+
+        "requires_liftgate": customer.requires_liftgate,
+        "requires_straight_truck": customer.requires_straight_truck,
+        "appointment_required": customer.appointment_required,
+        "limited_access": customer.limited_access,
+        "call_before_delivery": customer.call_before_delivery,
+        "inside_delivery": customer.inside_delivery,
+        "dock_available": customer.dock_available,
+        "forklift_available": customer.forklift_available,
+        "pallet_jack_required": customer.pallet_jack_required,
+
+        "is_hazmat": customer.is_hazmat,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    inserted_customer = await supabase_insert("customer_accounts", account_payload)
+
+    if not inserted_customer:
+        raise HTTPException(status_code=500, detail="Failed to create customer account.")
+
+    customer_id = inserted_customer[0]["id"]
+
+    if customer.is_hazmat:
+        hazmat_payload = {
+            "customer_account_id": customer_id,
+            "un_number": customer.un_number,
+            "hazmat_class": customer.hazmat_class,
+            "packing_group": customer.packing_group,
+            "container_type": customer.container_type,
+            "proper_shipping_name": customer.proper_shipping_name,
+            "placard_required": customer.placard_required,
+            "created_at": now,
+        }
+
+        await supabase_insert("customer_hazmat_profiles", hazmat_payload)
+
+    return {
+        "id": customer_id,
+        "account_code": account_code,
+        "business_name": customer.business_name,
+        "message": "Customer account created successfully."
+    }
+
+
+@app.get("/customers/{account_code}")
+async def get_customer(account_code: str):
+    customers = await supabase_get(
+        "customer_accounts",
+        {
+            "select": "*",
+            "account_code": f"eq.{account_code}"
+        }
+    )
+
+    if not customers:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+
+    customer = customers[0]
+
+    hazmat_profiles = await supabase_get(
+        "customer_hazmat_profiles",
+        {
+            "select": "*",
+            "customer_account_id": f"eq.{customer['id']}"
+        }
+    )
+
+    return {
+        "customer": customer,
+        "hazmat_profiles": hazmat_profiles
+    }
+"@ | Set-Content "backend/customer-account-api/main.py"
+
+@"
+# Pyle Century Customer Account API
+
+FastAPI backend for customer account creation, lookup, restrictions, and hazmat profiles.
+
+## Render setup
+
+Render settings:
+
+Root Directory:
+backend/customer-account-api
+
+Build Command:
+pip install -r requirements.txt
+
+Start Command:
+uvicorn main:app --host 0.0.0.0 --port `$PORT
+
+Environment Variables:
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+
+## Test URLs
+
+After deployment:
+
+/
+returns service status.
+
+/docs
+opens FastAPI Swagger API testing page.
+
+/health
+returns a basic health check.
+"@ | Set-Content "backend/customer-account-api/README.md"
 
 @"
 -- Pyle Century Supabase schema starter
@@ -138,252 +379,61 @@ create table if not exists customer_hazmat_profiles (
 "@ | Set-Content "database/supabase/schema.sql"
 
 @"
--- Seed data goes here later.
-"@ | Set-Content "database/supabase/seed.sql"
+# Render Setup
 
-@"
-fastapi
-uvicorn[standard]
-supabase
-python-dotenv
-pydantic
-"@ | Set-Content "backend/customer-account-api/requirements.txt"
+## 1. Push this repo to GitHub
 
-@"
-# Pyle Century Customer Account API
+git add .
+git commit -m "Clean Render-first Customer Account API"
+git push
 
-Python FastAPI backend for customer account creation, lookup, restrictions, and hazmat profiles.
+## 2. Create Supabase tables
 
-## Local setup
+Open:
+database/supabase/schema.sql
 
-python -m venv .venv
-.venv\Scripts\activate
+Paste into:
+Supabase > SQL Editor > New Query > Run
+
+## 3. Create Render Web Service
+
+Render > New > Web Service
+
+Connect this GitHub repo.
+
+Use:
+
+Root Directory:
+backend/customer-account-api
+
+Build Command:
 pip install -r requirements.txt
-python -m uvicorn main:app --reload
 
-## Environment variables
+Start Command:
+uvicorn main:app --host 0.0.0.0 --port `$PORT
 
-Create a .env file locally, but do not commit it.
+## 4. Add Environment Variables in Render
 
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-"@ | Set-Content "backend/customer-account-api/README.md"
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
 
-@"
-SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-"@ | Set-Content "backend/customer-account-api/.env.example"
+Do not put those in GitHub.
 
-@"
-import os
-from datetime import datetime
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from dotenv import load_dotenv
-from supabase import create_client, Client
+## 5. Test
 
-load_dotenv()
+Open:
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+https://YOUR-RENDER-URL.onrender.com/
 
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-    raise RuntimeError("Missing Supabase environment variables.")
+Then:
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+https://YOUR-RENDER-URL.onrender.com/docs
+"@ | Set-Content "docs/render-setup.md"
 
-app = FastAPI(title="Pyle Century Customer Account API")
-
-
-class CustomerCreate(BaseModel):
-    business_name: str
-    address1: str
-    address2: str | None = None
-    city: str
-    state: str
-    zip_code: str
-    phone: str | None = None
-    contact_name: str | None = None
-    contact_email: str | None = None
-
-    requires_liftgate: bool = False
-    requires_straight_truck: bool = False
-    appointment_required: bool = False
-    limited_access: bool = False
-    call_before_delivery: bool = False
-    inside_delivery: bool = False
-    dock_available: bool = False
-    forklift_available: bool = False
-    pallet_jack_required: bool = False
-
-    is_hazmat: bool = False
-    un_number: str | None = None
-    hazmat_class: str | None = None
-    packing_group: str | None = None
-    container_type: str | None = None
-    proper_shipping_name: str | None = None
-    placard_required: bool = False
-
-
-def make_prefix(text: str, length: int) -> str:
-    cleaned = "".join(ch for ch in text.upper() if ch.isalnum())
-    return cleaned[:length].ljust(length, "X")
-
-
-def generate_account_code(city: str, business_name: str) -> str:
-    city_prefix = make_prefix(city, 3)
-    business_prefix = make_prefix(business_name, 3)
-
-    prefix = f"{city_prefix}-{business_prefix}"
-
-    existing = (
-        supabase.table("customer_accounts")
-        .select("account_code")
-        .like("account_code", f"{prefix}-%")
-        .execute()
-    )
-
-    next_number = len(existing.data) + 1
-    return f"{prefix}-{next_number:04d}"
-
-
-@app.get("/")
-def health_check():
-    return {
-        "service": "Pyle Century Customer Account API",
-        "status": "online"
-    }
-
-
-@app.post("/customers")
-def create_customer(customer: CustomerCreate):
-    account_code = generate_account_code(customer.city, customer.business_name)
-
-    account_payload = {
-        "account_code": account_code,
-        "business_name": customer.business_name,
-        "address1": customer.address1,
-        "address2": customer.address2,
-        "city": customer.city,
-        "state": customer.state,
-        "zip_code": customer.zip_code,
-        "phone": customer.phone,
-        "contact_name": customer.contact_name,
-        "contact_email": customer.contact_email,
-
-        "requires_liftgate": customer.requires_liftgate,
-        "requires_straight_truck": customer.requires_straight_truck,
-        "appointment_required": customer.appointment_required,
-        "limited_access": customer.limited_access,
-        "call_before_delivery": customer.call_before_delivery,
-        "inside_delivery": customer.inside_delivery,
-        "dock_available": customer.dock_available,
-        "forklift_available": customer.forklift_available,
-        "pallet_jack_required": customer.pallet_jack_required,
-
-        "is_hazmat": customer.is_hazmat,
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
-    }
-
-    result = supabase.table("customer_accounts").insert(account_payload).execute()
-
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to create customer account.")
-
-    customer_id = result.data[0]["id"]
-
-    if customer.is_hazmat:
-        hazmat_payload = {
-            "customer_account_id": customer_id,
-            "un_number": customer.un_number,
-            "hazmat_class": customer.hazmat_class,
-            "packing_group": customer.packing_group,
-            "container_type": customer.container_type,
-            "proper_shipping_name": customer.proper_shipping_name,
-            "placard_required": customer.placard_required,
-            "created_at": datetime.utcnow().isoformat(),
-        }
-
-        supabase.table("customer_hazmat_profiles").insert(hazmat_payload).execute()
-
-    return {
-        "id": customer_id,
-        "account_code": account_code,
-        "business_name": customer.business_name,
-        "message": "Customer account created successfully."
-    }
-
-
-@app.get("/customers/{account_code}")
-def get_customer(account_code: str):
-    result = (
-        supabase.table("customer_accounts")
-        .select("*")
-        .eq("account_code", account_code)
-        .single()
-        .execute()
-    )
-
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Customer not found.")
-
-    customer_id = result.data["id"]
-
-    hazmat = (
-        supabase.table("customer_hazmat_profiles")
-        .select("*")
-        .eq("customer_account_id", customer_id)
-        .execute()
-    )
-
-    return {
-        "customer": result.data,
-        "hazmat_profiles": hazmat.data
-    }
-"@ | Set-Content "backend/customer-account-api/main.py"
-
-@"
-# Pyle Century Roadmap
-
-## Phase 1
-- Dock Commander desktop dummy-data release
-- Dock Commander mobile dummy-data version
-- Customer Account API
-- Supabase database schema
-
-## Phase 2
-- Customer Account Manager desktop app
-- Save customer accounts to Supabase through Python backend
-- Search customer accounts by account code
-
-## Phase 3
-- Dock Commander live backend
-- Trailer, door, rack, and hazmat tables
-- Realtime updates
-
-## Phase 4
-- Route Sequencer
-- Billing integration
-"@ | Set-Content "docs/roadmap.md"
-
-@"
-# Architecture
-
-C# Desktop / Mobile Apps
-        ↓
-Python FastAPI Backend
-        ↓
-Supabase PostgreSQL
-
-The C# apps should not store Supabase service-role keys.
-
-Only the Python backend should use the service role key.
-"@ | Set-Content "docs/architecture.md"
-
-Write-Host "Pyle Century project structure created." -ForegroundColor Green
+Write-Host "Clean Pyle Century Render-first backend setup complete." -ForegroundColor Green
 Write-Host ""
-Write-Host "Next steps:" -ForegroundColor Yellow
+Write-Host "Next commands:" -ForegroundColor Yellow
+Write-Host "git status"
 Write-Host "git add ."
-Write-Host "git commit -m `"Initial Pyle Century project structure`""
+Write-Host "git commit -m `"Clean Render-first Customer Account API`""
 Write-Host "git push"
