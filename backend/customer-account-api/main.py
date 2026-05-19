@@ -147,6 +147,21 @@ async def supabase_patch(table: str, match_column: str, match_value: str, payloa
     return response.json() if response.text else []
 
 
+
+async def supabase_delete(table: str, match_column: str, match_value: str):
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.delete(
+            f"{SUPABASE_REST_URL}/{table}",
+            headers=HEADERS,
+            params={match_column: f"eq.{match_value}"}
+        )
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    return response.text
+
+
 async def geocode_address(address1: str, city: str, state: str, zip_code: str) -> tuple[float | None, float | None]:
     query = f"{address1}, {city}, {state} {zip_code}, USA".strip()
 
@@ -207,6 +222,29 @@ def health_check():
 def health():
     return {
         "status": "ok"
+    }
+
+
+
+
+@app.get("/system/status")
+async def system_status():
+    backend = {"status": "online"}
+    database = {"status": "unknown", "message": ""}
+
+    try:
+        await supabase_get("customer_accounts", {"select": "id", "limit": "1"})
+        database = {"status": "online", "message": "Supabase reachable."}
+        overall = "online"
+    except Exception as ex:
+        database = {"status": "offline", "message": str(ex)}
+        overall = "degraded"
+
+    return {
+        "overall_status": overall,
+        "backend": backend,
+        "database": database,
+        "checked_at": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -444,3 +482,30 @@ async def get_shipment(pro_number: str):
     return {
         "shipment": shipments[0]
     }
+
+
+@app.delete("/customers/{account_code}")
+async def delete_customer(account_code: str):
+    code = account_code.strip().upper()
+
+    existing = await supabase_get(
+        "customer_accounts",
+        {
+            "select": "id,account_code,business_name",
+            "account_code": f"eq.{code}"
+        }
+    )
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found.")
+
+    customer_id = existing[0]["id"]
+
+    await supabase_delete("customer_hazmat_profiles", "customer_account_id", customer_id)
+    await supabase_delete("customer_accounts", "account_code", code)
+
+    return {
+        "account_code": code,
+        "message": "Customer account deleted successfully."
+    }
+
