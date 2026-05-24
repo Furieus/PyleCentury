@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DockCommander</AssemblyName>
+    <Product>Pyle Century Dock Commander</Product>
+    <Company>Pyle Century</Company>
+    <Authors>Pyle Century</Authors>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>Resources\DockCommander.ico</ApplicationIcon>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

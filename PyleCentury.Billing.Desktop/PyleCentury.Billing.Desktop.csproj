@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>Resources\Billing.ico</ApplicationIcon>
+    <AssemblyName>PyleCentury.Billing</AssemblyName>
+    <Product>Pyle Century Billing</Product>
+    <Company>Pyle Century</Company>
+    <Authors>Pyle Century</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

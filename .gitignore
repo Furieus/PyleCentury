@@ -1,0 +1,16 @@
+.vs/
+.vscode/
+bin/
+obj/
+release/
+publish/
+*.user
+*.suo
+*.db
+*.sqlite
+.env
+.env.*
+appsettings.Production.json
+*.log
+TestResults/
+*.zip

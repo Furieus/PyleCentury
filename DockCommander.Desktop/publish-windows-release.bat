@@ -1,0 +1,23 @@
+@echo off
+setlocal
+
+echo Publishing Dock Commander no-splash release...
+echo.
+
+dotnet publish DockCommander.Desktop.csproj ^
+  -c Release ^
+  -f net10.0-windows ^
+  -r win-x64 ^
+  --self-contained true ^
+  -p:PublishSingleFile=true ^
+  -p:IncludeNativeLibrariesForSelfExtract=true ^
+  -p:EnableCompressionInSingleFile=true ^
+  -p:DebugType=None ^
+  -p:DebugSymbols=false ^
+  -o ".\release\win-x64"
+
+echo.
+echo Release output:
+echo %cd%\release\win-x64
+echo.
+pause
