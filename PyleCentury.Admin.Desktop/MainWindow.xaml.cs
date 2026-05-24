@@ -3,18 +3,30 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Windows;
 using Microsoft.Extensions.Configuration;
+using PyleCentury.Shared;
 
 namespace PyleCentury.Admin.Desktop;
 
 public partial class MainWindow : Window
 {
     private readonly HttpClient _http = new();
+    private readonly LaunchContext? _launchContext;
     private readonly string _apiBaseUrl;
     private readonly ObservableCollection<AdminUserRow> _users = new();
     private AdminUserRow? _selectedUser;
 
     public MainWindow()
     {
+        _launchContext = ModuleLaunchGuard.RequireMenuLaunch("Admin");
+        if (_launchContext is null) return;
+
+        if (!string.Equals(_launchContext.AdminPermission, "admin", StringComparison.OrdinalIgnoreCase) && _launchContext.AccessLevel != 4)
+        {
+            MessageBox.Show("Your access level does not allow Employee Manager access.", "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Application.Current.Shutdown();
+            return;
+        }
+
         InitializeComponent();
 
         var config = new ConfigurationBuilder()

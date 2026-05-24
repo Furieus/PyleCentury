@@ -50,7 +50,7 @@ public partial class MainWindow : Window
                 EmployeeIdText.Text = "-";
                 HomeTerminalText.Text = "-";
                 ProfileMessageText.Text = "No profile found. Use Employee Manager or contact an admin.";
-                AdminButton.Visibility = Visibility.Visible;
+                AdminButton.Visibility = Visibility.Collapsed;
                 SetStatus("No employee profile found for this Windows username.", true);
                 return;
             }
@@ -73,7 +73,7 @@ public partial class MainWindow : Window
             EmployeeIdText.Text = "-";
             HomeTerminalText.Text = "-";
             ProfileMessageText.Text = "Backend unavailable";
-            AdminButton.Visibility = Visibility.Visible;
+            AdminButton.Visibility = Visibility.Collapsed;
             SetModuleButtons(false);
             SetStatus($"Profile lookup failed: {ex.Message}", true);
         }
@@ -159,28 +159,9 @@ public partial class MainWindow : Window
         await LaunchAppAsync("RPS", "RPS", "PyleCentury.RPS.Desktop", "PyleCentury.RPS.exe");
     }
 
-    private void OpenEmployeeManager_Click(object sender, RoutedEventArgs e)
+    private async void OpenEmployeeManager_Click(object sender, RoutedEventArgs e)
     {
-        var pathToLaunch = FindAppExecutable("PyleCentury.Admin.Desktop", "PyleCentury.Admin.exe");
-
-        if (string.IsNullOrWhiteSpace(pathToLaunch))
-        {
-            MessageBox.Show(
-                "Employee Manager was not found.\n\nBuild/publish PyleCentury.Admin.Desktop, then try again.",
-                "Application not found",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = pathToLaunch,
-            WorkingDirectory = Path.GetDirectoryName(pathToLaunch)!,
-            UseShellExecute = true
-        });
-
-        SetStatus("Opened Employee Manager.");
+        await LaunchAppAsync("Employee Manager", "Admin", "PyleCentury.Admin.Desktop", "PyleCentury.Admin.exe");
     }
 
     private async Task LaunchAppAsync(string appName, string moduleCode, string projectFolderName, string executableName)
