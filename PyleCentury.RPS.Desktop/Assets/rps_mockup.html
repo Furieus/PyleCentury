@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pyle Century RPS - Clip Named Runs</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root{
+      --bg:#071018;--panel:#0B1620;--line:#263241;--muted:#94A3B8;
+      --text:#F8FAFC;--orange:#F97316;--green:#22C55E;--red:#EF4444;
+      --yellow:#F59E0B;--purple:#A855F7;--blue:#38BDF8;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,Arial,sans-serif;overflow:hidden}
+    .app{height:100vh;display:grid;grid-template-rows:62px 1fr 38px}
+    .topbar{background:#050A0F;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 18px;gap:18px}
+    .brand{display:flex;align-items:center;font-weight:900;font-size:22px;font-style:italic;letter-spacing:.4px;min-width:260px}
+    .bolt{color:var(--orange);margin:0 5px;font-size:26px}.century{color:var(--orange)}
+    .module-pill{background:#241106;border:1px solid var(--orange);color:#FED7AA;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:900;letter-spacing:.4px}
+    .top-info{margin-left:auto;display:flex;gap:18px;color:#CBD5E1;font-size:13px;align-items:center}
+    .avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#422006;border:1px solid var(--orange);color:var(--orange);font-weight:800}
+
+    .content{display:grid;grid-template-rows:126px 1fr;padding:14px;gap:12px;min-width:0;min-height:0}
+    .route-header{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;display:grid;grid-template-columns:1.05fr .95fr .65fr .65fr .75fr .65fr .75fr auto;gap:16px;align-items:center}
+    .metric-label{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:5px}
+    .metric-value{font-size:18px;font-weight:900}.metric-sub{color:var(--muted);font-size:11px;margin-top:4px}
+    select,input{height:36px;background:#111827;color:#F8FAFC;border:1px solid #374151;border-radius:7px;padding:0 9px;font-weight:700;outline:none}
+    button{border:1px solid #374151;background:#111827;color:#E5E7EB;height:38px;border-radius:7px;padding:0 12px;font-weight:800;cursor:pointer}
+    button.primary{background:var(--orange);border-color:#000;color:#111827}
+    button:hover{filter:brightness(1.1)}
+    button.danger{border-color:#7F1D1D;color:#FCA5A5;background:#1F1111}
+    button.warn{border-color:#92400E;color:#FED7AA;background:#241106}
+
+    .workspace{min-height:0;display:grid;grid-template-columns:360px 1fr 410px;gap:12px}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+    .panel-title{min-height:48px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:8px 12px;font-size:12px;font-weight:900;color:var(--orange);text-transform:uppercase;letter-spacing:.2px;gap:8px;flex-wrap:wrap}
+    .panel-title .count{color:var(--muted);font-weight:700}
+    .panel-controls{display:flex;gap:8px;width:100%;margin-top:4px}
+    .panel-controls select,.panel-controls input{width:100%}
+    .freight-list,.sequence-list{padding:10px;overflow-y:auto;min-height:0}
+
+    .freight-card,.sequence-card{background:linear-gradient(180deg,#111827,#0B1220);border:1px solid #263241;border-radius:9px;padding:11px;margin-bottom:9px;cursor:grab;transition:border-color .12s,transform .12s}
+    .sequence-card{display:grid;grid-template-columns:34px 1fr 34px;gap:9px;align-items:center}
+    .freight-card:hover,.sequence-card:hover{border-color:var(--orange);transform:translateY(-1px)}
+    .freight-card.dragging,.sequence-card.dragging{opacity:.45;border-color:var(--orange)}
+    .remove-btn{cursor:pointer;width:28px;height:28px;border-radius:7px;border:1px solid #7F1D1D;color:#FCA5A5;background:#1F1111;display:grid;place-items:center;font-weight:900}
+
+    .pro{font-size:12px;font-weight:900;letter-spacing:.4px;margin-bottom:4px}
+    .customer{font-size:13px;font-weight:800;margin-bottom:4px}
+    .small{color:var(--muted);font-size:11px;line-height:1.4}
+    .badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+    .badge{min-width:20px;height:20px;border-radius:4px;display:inline-grid;place-items:center;padding:0 5px;font-size:10px;font-weight:900;border:1px solid #000}
+    .badge.h{background:var(--red);color:#111}.badge.l{background:var(--yellow);color:#111}.badge.st{background:#2563EB;color:#fff}.badge.f{background:var(--purple);color:#fff}.badge.a{background:var(--green);color:#111}.badge.city{background:#334155;color:#E5E7EB}.badge.clip{background:#F97316;color:#111}
+
+    .map-wrap{position:relative;min-height:0}#map{width:100%;height:100%;background:#111827}
+    .map-overlay{position:absolute;left:14px;top:14px;z-index:600;background:rgba(7,16,24,.90);border:1px solid var(--line);border-radius:10px;padding:10px;width:390px;backdrop-filter:blur(6px)}
+    .map-overlay .title{color:var(--orange);font-weight:900;font-size:12px;margin-bottom:5px}.map-overlay .hint{color:#CBD5E1;font-size:11px;line-height:1.4}
+    .legend{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;color:var(--muted);font-size:10px}
+
+    .seq-num{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--orange);color:#111827;font-weight:900;font-size:12px}
+    .marker-label,.terminal-label{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--orange);color:#111827;border:2px solid #000;font-weight:900;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+    .terminal-label{width:34px;height:34px;background:#22C55E}
+    .bottom-bar{background:#050A0F;border-top:1px solid var(--line);display:flex;align-items:center;padding:0 12px;gap:12px;color:var(--muted);font-size:12px}
+    .hotkey{border:1px solid var(--orange);color:var(--orange);padding:3px 7px;border-radius:5px;font-weight:900;background:#111827}
+    .drop-hint{border:1px dashed #475569;border-radius:8px;padding:10px;color:var(--muted);font-size:11px;text-align:center;margin-bottom:8px}
+    .empty-route{height:92%;display:grid;place-items:center;color:#64748B;text-align:center;padding:22px}
+    .leaflet-popup-content-wrapper{background:#111827;color:#E5E7EB;border:1px solid #F97316}.leaflet-popup-tip{background:#111827}
+    .context-menu{position:fixed;z-index:9999;background:#0B1620;border:1px solid #374151;border-radius:8px;min-width:230px;box-shadow:0 12px 30px rgba(0,0,0,.45);padding:6px;display:none}
+    .context-title{font-size:11px;color:#94A3B8;padding:7px 9px;border-bottom:1px solid #263241;margin-bottom:4px}
+    .context-item{padding:8px 9px;border-radius:6px;font-size:12px;cursor:pointer;color:#E5E7EB}
+    .context-item:hover{background:#241106;color:#FED7AA}
+    .context-sep{height:1px;background:#263241;margin:5px 0}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand"><span>PYLE</span><span class="bolt">⚡</span><span class="century">CENTURY</span></div>
+      <div class="module-pill">RPS · ROUTE PLANNING SYSTEM</div>
+      <div class="top-info">
+        <span>Terminal: <b>CON / Southington</b></span>
+        <span>Wave: <b>AM CITY</b></span>
+        <span>Cut: <b>08:30</b></span>
+        <div class="avatar">DA</div>
+      </div>
+    </div>
+
+    <main class="content">
+      <section class="route-header">
+        <div>
+          <div class="metric-label">Bucket</div>
+          <div class="metric-value" id="bucketMetric">Wallingford</div>
+          <div class="metric-sub" id="bucketCities">Meriden / Wallingford / North Haven</div>
+        </div>
+        <div>
+          <div class="metric-label">Active Run</div>
+          <div class="metric-value" id="routeMetric">Working Run</div>
+          <div class="metric-sub" id="routeSub">Clip prompts for name and creates saved run</div>
+        </div>
+        <div><div class="metric-label">Stops</div><div class="metric-value"><span id="proCount">0</span></div></div>
+        <div><div class="metric-label">Skids</div><div class="metric-value" id="skidCount">0</div></div>
+        <div><div class="metric-label">Weight</div><div class="metric-value" id="weightCount">0 lbs</div></div>
+        <div><div class="metric-label">Available</div><div class="metric-value" id="availableCount">0</div></div>
+        <div><div class="metric-label">Saved Runs</div><div class="metric-value" id="savedCount">0</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button id="autoSeqBtn">Sequence</button>
+          <button id="clipBtn" class="warn">📎 Clip</button>
+          <button id="unclipBtn">Unclip</button>
+          <button id="saveRunBtn" class="primary">Save</button>
+          <button id="deleteRouteBtn" class="danger">Delete</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="panel">
+          <div class="panel-title">
+            Freight Bucket <span class="count" id="poolCount"></span>
+            <div class="panel-controls">
+              <select id="bucketSelect">
+                <option value="wallingford">Wallingford</option>
+                <option value="fairfield">👁 Fairfield — routed by another user</option>
+                <option value="windsor">Windsor</option>
+              </select>
+              <input id="searchBox" placeholder="Search PRO / customer / city" />
+            </div>
+          </div>
+          <div class="freight-list" id="poolList"></div>
+        </div>
+
+        <div class="panel map-wrap">
+          <div id="map"></div>
+          <div class="map-overlay">
+            <div class="title">LIVE ACTIVE RUN MAP</div>
+            <div class="hint">
+              The run dropdown starts empty. Build a working run, click Clip to name it and add 📎, then use Save Run to commit it.
+            </div>
+            <div class="legend">
+              <span><span class="badge clip">📎</span> Saved/Clipped Run</span>
+              <span><span class="badge h">H</span> Hazmat</span>
+              <span><span class="badge l">L</span> Liftgate</span>
+              <span><span class="badge st">ST</span> Straight Truck</span>
+              <span><span class="badge f">F</span> Freezable</span>
+              <span><span class="badge a">A</span> Appointment</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            Saved Runs
+            <div class="panel-controls">
+              <select id="routeSelect">
+                <option value="">No saved runs</option>
+              </select>
+            </div>
+          </div>
+          <div class="sequence-list" id="sequenceList"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="bottom-bar">
+      <span class="hotkey">F7</span> Wave Plan
+      <span class="hotkey">F8</span> Sequence Active Run
+      <span class="hotkey">F9</span> Map Run
+      <span class="hotkey">F10</span> Save Run
+      <span id="statusText" style="margin-left:auto;">Ready · mockup UI loaded in desktop app</span>
+    </footer>
+  </div>
+
+  <div id="contextMenu" class="context-menu"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const terminal={name:"CON Terminal",address:"87 Aircraft Rd, Southington, CT 06489",lat:41.5860,lng:-72.9017};
+
+    const buckets = {
+      wallingford: {
+        label: "Wallingford",
+        cities: "Meriden / Wallingford / North Haven",
+        center: [41.49, -72.83],
+        freight: [
+          {pro:"555123888",customer:"FleetPride",city:"Meriden",address:"1201 E Main St, Meriden, CT 06450",lat:41.52778,lng:-72.76770,skids:8,weight:10541,flags:["A","ST"],bucket:"wallingford"},
+          {pro:"882551904",customer:"Big Y Foods",city:"Meriden",address:"533 S Broad St, Meriden, CT 06450",lat:41.51615,lng:-72.80660,skids:2,weight:390,flags:["H","F"],bucket:"wallingford"},
+          {pro:"771222018",customer:"Meriden YMCA",city:"Meriden",address:"110 W Main St, Meriden, CT 06451",lat:41.53875,lng:-72.80795,skids:1,weight:1180,flags:["L","ST","A"],bucket:"wallingford"},
+          {pro:"339128445",customer:"Lowes Outlet",city:"Meriden",address:"1201 E Main St, Meriden, CT 06450",lat:41.53020,lng:-72.76720,skids:4,weight:1575,flags:["A"],bucket:"wallingford"},
+          {pro:"984123551",customer:"Apple Rehab",city:"Meriden",address:"33 Cone Ave, Meriden, CT 06450",lat:41.54005,lng:-72.80152,skids:1,weight:870,flags:["L","ST"],bucket:"wallingford"},
+          {pro:"331188701",customer:"Universal Pure",city:"Meriden",address:"65 Chamberlain Hwy, Meriden, CT 06451",lat:41.55060,lng:-72.81240,skids:2,weight:882,flags:[],bucket:"wallingford"},
+          {pro:"721665444",customer:"Wallingford Supply",city:"Wallingford",address:"5 Research Pkwy, Wallingford, CT 06492",lat:41.48020,lng:-72.76475,skids:3,weight:2200,flags:[],bucket:"wallingford"},
+          {pro:"331290772",customer:"Wallingford Industrial",city:"Wallingford",address:"900 Nrop Rd, Wallingford, CT 06492",lat:41.46360,lng:-72.81930,skids:2,weight:1860,flags:["F"],bucket:"wallingford"},
+          {pro:"441550990",customer:"Allegiance Trucks",city:"North Haven",address:"31 Leonardo Dr, North Haven, CT 06473",lat:41.36610,lng:-72.87205,skids:1,weight:280,flags:[],bucket:"wallingford"},
+          {pro:"667711223",customer:"Brescome Barton",city:"North Haven",address:"69 Defco Park Rd, North Haven, CT 06473",lat:41.39210,lng:-72.86140,skids:2,weight:2640,flags:["A"],bucket:"wallingford"},
+          {pro:"113355779",customer:"Covidien",city:"North Haven",address:"195 McDermott Rd, North Haven, CT 06473",lat:41.38310,lng:-72.85760,skids:3,weight:1215,flags:[],bucket:"wallingford"},
+          {pro:"774400556",customer:"Dairy Queen",city:"North Haven",address:"59 Washington Ave, North Haven, CT 06473",lat:41.38870,lng:-72.85990,skids:1,weight:94,flags:["F"],bucket:"wallingford"}
+        ]
+      },
+      fairfield: {
+        label: "Fairfield",
+        cities: "Fairfield / Norwalk / Darien / Westport",
+        center: [41.15, -73.36],
+        freight: [
+          {pro:"902100441",customer:"Fairfield Industrial",city:"Fairfield",address:"185 Commerce Dr, Fairfield, CT 06825",lat:41.17690,lng:-73.24410,skids:5,weight:4400,flags:["A"],bucket:"fairfield"},
+          {pro:"902100442",customer:"Norwalk Supply",city:"Norwalk",address:"30 Muller Ave, Norwalk, CT 06851",lat:41.13530,lng:-73.42140,skids:2,weight:1250,flags:["L"],bucket:"fairfield"},
+          {pro:"902100443",customer:"Darien Market",city:"Darien",address:"25 Old Kings Hwy N, Darien, CT 06820",lat:41.07820,lng:-73.46910,skids:1,weight:650,flags:["F"],bucket:"fairfield"},
+          {pro:"902100444",customer:"Westport Medical",city:"Westport",address:"333 Post Rd W, Westport, CT 06880",lat:41.12850,lng:-73.37330,skids:3,weight:2780,flags:["ST","A"],bucket:"fairfield"},
+          {pro:"902100445",customer:"Wilton Packaging",city:"Wilton",address:"64 Danbury Rd, Wilton, CT 06897",lat:41.18660,lng:-73.42430,skids:4,weight:5120,flags:[],bucket:"fairfield"},
+          {pro:"902100446",customer:"Norwalk Food Service",city:"Norwalk",address:"1 Muller Ave, Norwalk, CT 06851",lat:41.13710,lng:-73.41960,skids:6,weight:6125,flags:["F","A"],bucket:"fairfield"},
+          {pro:"902100447",customer:"Darien Hardware",city:"Darien",address:"320 Post Rd, Darien, CT 06820",lat:41.07950,lng:-73.46730,skids:1,weight:420,flags:["L"],bucket:"fairfield"},
+          {pro:"902100448",customer:"Westport Outlet",city:"Westport",address:"605 Post Rd E, Westport, CT 06880",lat:41.13980,lng:-73.34690,skids:2,weight:1325,flags:[],bucket:"fairfield"},
+          {pro:"902100449",customer:"Fairfield Medical",city:"Fairfield",address:"1305 Post Rd, Fairfield, CT 06824",lat:41.14140,lng:-73.25730,skids:2,weight:955,flags:["ST"],bucket:"fairfield"},
+          {pro:"902100450",customer:"Norwalk Industrial",city:"Norwalk",address:"25 Van Zant St, Norwalk, CT 06855",lat:41.10040,lng:-73.40460,skids:7,weight:7180,flags:["H"],bucket:"fairfield"}
+        ]
+      },
+      windsor: {
+        label: "Windsor",
+        cities: "Windsor / Bloomfield / East Granby",
+        center: [41.91, -72.70],
+        freight: [
+          {pro:"803410001",customer:"Windsor Distribution",city:"Windsor",address:"1000 Day Hill Rd, Windsor, CT 06095",lat:41.87660,lng:-72.71480,skids:8,weight:8400,flags:["A"],bucket:"windsor"},
+          {pro:"803410002",customer:"Windsor Locks Supply",city:"Windsor",address:"200 Great Pond Dr, Windsor, CT 06095",lat:41.89510,lng:-72.72420,skids:4,weight:3610,flags:[],bucket:"windsor"},
+          {pro:"803410003",customer:"Bloomfield Medical",city:"Bloomfield",address:"35 Jolley Dr, Bloomfield, CT 06002",lat:41.82610,lng:-72.73570,skids:2,weight:980,flags:["ST","A"],bucket:"windsor"},
+          {pro:"803410004",customer:"Bloomfield Foods",city:"Bloomfield",address:"22 Tobey Rd, Bloomfield, CT 06002",lat:41.83330,lng:-72.72150,skids:5,weight:4220,flags:["F"],bucket:"windsor"},
+          {pro:"803410005",customer:"East Granby Packaging",city:"East Granby",address:"18 Kripes Rd, East Granby, CT 06026",lat:41.93980,lng:-72.73830,skids:3,weight:2440,flags:["L"],bucket:"windsor"},
+          {pro:"803410006",customer:"East Granby Aero",city:"East Granby",address:"20 International Dr, East Granby, CT 06026",lat:41.92920,lng:-72.70970,skids:2,weight:1795,flags:["H"],bucket:"windsor"},
+          {pro:"803410007",customer:"Windsor Industrial",city:"Windsor",address:"755 Rainbow Rd, Windsor, CT 06095",lat:41.91120,lng:-72.68280,skids:6,weight:6400,flags:["ST"],bucket:"windsor"},
+          {pro:"803410008",customer:"Bloomfield Warehouse",city:"Bloomfield",address:"10 Griffin Rd N, Bloomfield, CT 06002",lat:41.82010,lng:-72.74810,skids:4,weight:3120,flags:[],bucket:"windsor"}
+        ]
+      }
+    };
+
+    const routes = {};
+    let workingRun = [];
+    let activeBucket = "wallingford";
+    let activeRoute = null;
+    let routeIdCounter = 1;
+    let draggedPro = null;
+    let contextPro = null;
+    let markers = {};
+    let routeLine;
+
+    const map=L.map("map",{zoomControl:true}).setView([41.49,-72.83],11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
+    const terminalIcon=L.divIcon({className:"",html:`<div class="terminal-label">T</div>`,iconSize:[34,34],iconAnchor:[17,17]});
+    L.marker([terminal.lat,terminal.lng],{icon:terminalIcon}).addTo(map).bindPopup(`<b>${terminal.name}</b><br>${terminal.address}<br><span style="color:#22C55E;">Route origin</span>`);
+
+    function setStatus(message){statusText.textContent=message;}
+    function savedRoutes(){return Object.entries(routes);}
+    function allAssignedPros(){
+      return [
+        ...workingRun.map(s=>s.pro),
+        ...Object.values(routes).flatMap(r => r.stops.map(s => s.pro))
+      ];
+    }
+
+    function getActiveStops(){
+      return activeRoute ? routes[activeRoute].stops : workingRun;
+    }
+
+    function getActiveRouteDisplayName(){
+      return activeRoute ? `📎 ${routes[activeRoute].label}` : "Working Run";
+    }
+
+    function availableFreight(){
+      const assigned = new Set(allAssignedPros());
+      const term = searchBox.value.trim().toLowerCase();
+      return buckets[activeBucket].freight.filter(f => {
+        if (assigned.has(f.pro)) return false;
+        if (!term) return true;
+        return [f.pro, f.customer, f.city, f.address].join(" ").toLowerCase().includes(term);
+      });
+    }
+
+    function markerIcon(num,flags){
+      let color="#F97316";
+      if(flags.includes("H"))color="#EF4444";
+      else if(flags.includes("F"))color="#A855F7";
+      else if(flags.includes("A"))color="#22C55E";
+      return L.divIcon({className:"",html:`<div class="marker-label" style="background:${color};">${num}</div>`,iconSize:[30,30],iconAnchor:[15,15]});
+    }
+
+    function flagBadges(flags){return flags.map(f=>`<span class="badge ${f.toLowerCase()}">${f}</span>`).join("");}
+
+    function cardHtml(item){
+      return `<div class="freight-card" draggable="true" data-pro="${item.pro}">
+        <div class="pro">PRO ${item.pro}</div>
+        <div class="customer">${item.customer}</div>
+        <div class="small">${item.address}<br>${item.skids} skids · ${item.weight.toLocaleString()} lbs</div>
+        <div class="badges"><span class="badge city">${item.city}</span>${flagBadges(item.flags)}</div>
+      </div>`;
+    }
+
+    function seqHtml(item,index){
+      return `<div class="sequence-card" draggable="true" data-pro="${item.pro}">
+        <div class="seq-num">${index+1}</div>
+        <div>
+          <div class="pro">PRO ${item.pro}</div>
+          <div class="customer">${item.customer}</div>
+          <div class="small">${item.city} · ${item.skids} skids · ${item.weight.toLocaleString()} lbs</div>
+          <div class="badges">${flagBadges(item.flags)}</div>
+        </div>
+        <div class="remove-btn" title="Move back to bucket" data-remove="${item.pro}">×</div>
+      </div>`;
+    }
+
+    function renderRouteDropdown(){
+      const saved = savedRoutes();
+      if(!saved.length){
+        routeSelect.innerHTML = `<option value="">No saved runs</option>`;
+        routeSelect.disabled = true;
+        return;
+      }
+
+      routeSelect.disabled = false;
+      routeSelect.innerHTML = saved.map(([key, route]) =>
+        `<option value="${key}">📎 ${route.label}</option>`
+      ).join("");
+
+      if(activeRoute && routes[activeRoute]) {
+        routeSelect.value = activeRoute;
+      } else {
+        routeSelect.value = saved[0][0];
+      }
+    }
+
+    function renderPool(){
+      const items = availableFreight();
+      poolList.innerHTML = items.length
+        ? `<div class="drop-hint">Drag freight to the run. Drag run cards back here to return freight to the bucket. Bucket right-click only moves to clipped runs.</div>` + items.map(cardHtml).join("")
+        : `<div class="empty-route">No available freight in this bucket.<br><br>Try another bucket, delete a run, or move cards back to the bucket.</div>`;
+      poolCount.textContent = `(${items.length} available)`;
+      availableCount.textContent = items.length;
+      bindDragAndContext();
+    }
+
+    function renderSequence(){
+      const stops = getActiveStops();
+      const label = getActiveRouteDisplayName();
+      sequenceList.innerHTML = stops.length
+        ? stops.map(seqHtml).join("")
+        : `<div class="empty-route">Drop freight here to build:<br><br><b>${label}</b><br><br>Click 📎 Clip to name and create a saved run.</div>`;
+
+      document.querySelectorAll("[data-remove]").forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          moveBackToBucket(btn.dataset.remove);
+        };
+      });
+
+      bindDragAndContext();
+      updateMap();
+      updateTotals();
+    }
+
+    function updateHeader(){
+      bucketMetric.textContent = buckets[activeBucket].label;
+      bucketCities.textContent = buckets[activeBucket].cities;
+      routeMetric.textContent = getActiveRouteDisplayName();
+      routeSub.textContent = activeRoute
+        ? "Saved run selected"
+        : "Working run · click Clip to name and save";
+      savedCount.textContent = savedRoutes().length;
+    }
+
+    function updateTotals(){
+      const stops = getActiveStops();
+      proCount.textContent = stops.length;
+      skidCount.textContent = stops.reduce((s,x)=>s+x.skids,0);
+      weightCount.textContent = stops.reduce((s,x)=>s+x.weight,0).toLocaleString()+" lbs";
+    }
+
+    function updateMap(){
+      Object.values(markers).forEach(m=>map.removeLayer(m));
+      markers={};
+      if(routeLine)map.removeLayer(routeLine);
+
+      const stops = getActiveStops();
+      const points=[[terminal.lat,terminal.lng]];
+
+      stops.forEach((item,idx)=>{
+        points.push([item.lat,item.lng]);
+        const marker=L.marker([item.lat,item.lng],{draggable:false,icon:markerIcon(idx+1,item.flags)}).addTo(map);
+        marker.bindPopup(`<b>${idx+1}. ${item.customer}</b><br>PRO ${item.pro}<br>${item.address}<br>${item.skids} skids · ${item.weight.toLocaleString()} lbs<br>Flags: ${item.flags.length?item.flags.join(", "):"None"}<br><span style="color:#F97316;">Right-click the freight card to move this stop.</span>`);
+        markers[item.pro]=marker;
+      });
+
+      if(points.length>1){
+        routeLine=L.polyline(points,{color:"#F97316",weight:4,opacity:.82}).addTo(map);
+        map.fitBounds(routeLine.getBounds(),{padding:[45,45]});
+      } else {
+        const c = buckets[activeBucket].center;
+        map.setView(c, 10);
+      }
+    }
+
+    function distance(a,b){
+      const R=3958.8,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180,lat1=a.lat*Math.PI/180,lat2=b.lat*Math.PI/180;
+      const x=Math.sin(dLat/2)**2+Math.sin(dLng/2)**2*Math.cos(lat1)*Math.cos(lat2);
+      return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+    }
+
+    function autoSequenceActiveRoute(){
+      const source = getActiveStops();
+      const remaining=[...source];
+      const ordered=[];
+      let current={lat:terminal.lat,lng:terminal.lng};
+      while(remaining.length){
+        remaining.sort((a,b)=>distance(current,a)-distance(current,b));
+        const next=remaining.shift();
+        ordered.push(next);
+        current=next;
+      }
+
+      if(activeRoute) routes[activeRoute].stops = ordered;
+      else workingRun = ordered;
+
+      renderAll();
+      setStatus(`Auto sequenced ${getActiveRouteDisplayName()}.`);
+    }
+
+    function findFreightByPro(pro){
+      for (const bucket of Object.values(buckets)){
+        const found = bucket.freight.find(f => f.pro === pro);
+        if (found) return found;
+      }
+      if (workingRun.find(f => f.pro === pro)) return workingRun.find(f => f.pro === pro);
+      for (const route of Object.values(routes)){
+        const found = route.stops.find(f => f.pro === pro);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function removeFromAllRuns(pro){
+      workingRun = workingRun.filter(s => s.pro !== pro);
+      for (const route of Object.values(routes)){
+        route.stops = route.stops.filter(s => s.pro !== pro);
+      }
+    }
+
+    function addToActiveRun(pro){
+      const item = findFreightByPro(pro);
+      if(!item) return;
+      removeFromAllRuns(pro);
+      if(activeRoute) routes[activeRoute].stops.push(item);
+      else workingRun.push(item);
+      renderAll();
+      setStatus(`Added PRO ${pro} to ${getActiveRouteDisplayName()}.`);
+    }
+
+    function moveToRoute(pro, targetRoute){
+      const item = findFreightByPro(pro);
+      if(!item) return;
+      removeFromAllRuns(pro);
+      routes[targetRoute].stops.push(item);
+      renderAll();
+      setStatus(`Moved PRO ${pro} to 📎 ${routes[targetRoute].label}.`);
+    }
+
+    function moveBackToBucket(pro){
+      removeFromAllRuns(pro);
+      renderAll();
+      setStatus(`Moved PRO ${pro} back to its bucket.`);
+    }
+
+    function syncRouteFromDom(){
+      let order=[...sequenceList.querySelectorAll(".sequence-card[data-pro]")].map(x=>x.dataset.pro);
+      if(draggedPro && !order.includes(draggedPro)) order.push(draggedPro);
+
+      const existing = getActiveStops();
+      const result = [];
+      const seen = new Set();
+
+      order.forEach(pro => {
+        const item = existing.find(x => x.pro === pro) || findFreightByPro(pro);
+        if(item && !seen.has(pro)){
+          result.push(item);
+          seen.add(pro);
+        }
+      });
+
+      if(activeRoute) routes[activeRoute].stops = result;
+      else workingRun = result;
+
+      for (const [key, route] of Object.entries(routes)){
+        if(key !== activeRoute) route.stops = route.stops.filter(s => !seen.has(s.pro));
+      }
+      if(!activeRoute){
+        for (const [key, route] of Object.entries(routes)){
+          route.stops = route.stops.filter(s => !seen.has(s.pro));
+        }
+      }
+
+      draggedPro = null;
+      renderAll();
+      setStatus(`Manual sequence updated for ${getActiveRouteDisplayName()}.`);
+    }
+
+    function clipWorkingRun(){
+      if(activeRoute){
+        setStatus("A saved run is already selected. Unclip or switch back to building a working run by clearing the selection.");
+        return;
+      }
+
+      if(!workingRun.length){
+        alert("Add freight to the working run before clipping.");
+        return;
+      }
+
+      const defaultName = `${buckets[activeBucket].label} Primary`;
+      const name = prompt("Name this run:", defaultName);
+
+      if(!name || !name.trim()){
+        setStatus("Clip cancelled.");
+        return;
+      }
+
+      const key = "route_" + routeIdCounter++;
+      routes[key] = {
+        label: name.trim(),
+        stops: [...workingRun],
+        saved: false,
+        clipped: true
+      };
+
+      workingRun = [];
+      activeRoute = key;
+
+      renderAll();
+      setStatus(`Created clipped run: 📎 ${routes[key].label}. It has been added to the dropdown.`);
+      alert(`Run created: 📎 ${routes[key].label}\nIt has been added to the dropdown.`);
+    }
+
+    function unclipActiveRun(){
+      if(!activeRoute){
+        setStatus("No saved run selected to unclip.");
+        return;
+      }
+
+      const route = routes[activeRoute];
+      workingRun = [...route.stops];
+      delete routes[activeRoute];
+      activeRoute = null;
+      renderAll();
+      setStatus("Saved run unclipped and moved back into the working run.");
+    }
+
+    function deleteActiveRun(){
+      if(activeRoute){
+        const name = routes[activeRoute].label;
+        if(!confirm(`Delete 📎 ${name}?\n\nAll freight will return to its bucket.`)) return;
+        delete routes[activeRoute];
+        activeRoute = null;
+        renderAll();
+        setStatus(`Deleted 📎 ${name}. Freight returned to buckets.`);
+        return;
+      }
+
+      if(workingRun.length){
+        if(!confirm("Delete the working run?\n\nAll freight will return to its bucket.")) return;
+        workingRun = [];
+        renderAll();
+        setStatus("Deleted working run. Freight returned to buckets.");
+      } else {
+        setStatus("Nothing to delete.");
+      }
+    }
+
+    function saveActiveRun(){
+      if(!activeRoute){
+        alert("No clipped run selected. Build a working run, then click 📎 Clip first.");
+        return;
+      }
+
+      const route = routes[activeRoute];
+
+      if(!route || !route.stops.length){
+        alert("This run has no freight to save.");
+        return;
+      }
+
+      route.saved = true;
+      route.savedAt = new Date().toISOString();
+
+      renderAll();
+      setStatus(`Saved run: 📎 ${route.label}. Production save would go to Render/Supabase.`);
+      alert(`Saved run: 📎 ${route.label}\nStops: ${route.stops.length}\n\nProduction version will save this to Render/Supabase.`);
+    }
+
+    function bindDragAndContext(){
+      document.querySelectorAll("[draggable='true']").forEach(el=>{
+        el.ondragstart=e=>{
+          draggedPro=el.dataset.pro;
+          el.classList.add("dragging");
+          e.dataTransfer.effectAllowed="move";
+          e.dataTransfer.setData("text/plain",draggedPro);
+        };
+        el.ondragend=()=>el.classList.remove("dragging");
+
+        el.oncontextmenu=e=>{
+          e.preventDefault();
+          contextPro = el.dataset.pro;
+          showContextMenu(e.clientX, e.clientY, contextPro);
+        };
+      });
+
+      
+      // Allow dragging a run card back into the freight bucket.
+      poolList.ondragover = e => {
+        e.preventDefault();
+      };
+
+      poolList.ondrop = e => {
+        e.preventDefault();
+        const pro = draggedPro || e.dataTransfer.getData("text/plain");
+        if (pro) {
+          moveBackToBucket(pro);
+          draggedPro = null;
+        }
+      };
+
+      sequenceList.ondragover=e=>{
+        e.preventDefault();
+        const dragging=document.querySelector(".dragging");
+        const after=getDragAfterElement(sequenceList,e.clientY);
+        if(!dragging)return;
+        if(after==null)sequenceList.appendChild(dragging);
+        else sequenceList.insertBefore(dragging,after);
+      };
+
+      sequenceList.ondrop=e=>{
+        e.preventDefault();
+        syncRouteFromDom();
+      };
+    }
+
+    function isProInActiveRun(pro){
+      return getActiveStops().some(x => x.pro === pro);
+    }
+
+    function isProInAnySavedRun(pro){
+      return Object.values(routes).some(route => route.stops && route.stops.some(x => x.pro === pro));
+    }
+
+    function isProInWorkingRun(pro){
+      return workingRun.some(x => x.pro === pro);
+    }
+
+    function isProInRun(pro){
+      return isProInActiveRun(pro) || isProInAnySavedRun(pro) || isProInWorkingRun(pro);
+    }
+
+    function showContextMenu(x, y, pro){
+      const item = findFreightByPro(pro);
+      const cardIsInRun = isProInRun(pro);
+      const moveRoutes = Object.entries(routes).filter(([key]) => key !== activeRoute);
+
+      let html = `<div class="context-title">PRO ${pro} · ${item ? item.customer : ""}</div>`;
+
+      if(cardIsInRun){
+        html += `<div class="context-item" data-action="bucket">Move back to bucket</div>`;
+      }
+
+      if(moveRoutes.length){
+        if(cardIsInRun) html += `<div class="context-sep"></div>`;
+        html += `<div class="context-title">Move to clipped run</div>`;
+        moveRoutes.forEach(([key, route])=>{
+          html += `<div class="context-item" data-action="move" data-route="${key}">📎 ${route.label}</div>`;
+        });
+      } else {
+        if(cardIsInRun) html += `<div class="context-sep"></div>`;
+        html += `<div class="context-title">No clipped runs available</div>`;
+      }
+
+      contextMenu.innerHTML = html;
+      contextMenu.style.display = "block";
+      contextMenu.style.left = x + "px";
+      contextMenu.style.top = y + "px";
+
+      contextMenu.querySelectorAll(".context-item").forEach(el=>{
+        el.onclick=()=>{
+          const action = el.dataset.action;
+          if(action === "bucket") moveBackToBucket(contextPro);
+          if(action === "move") moveToRoute(contextPro, el.dataset.route);
+          hideContextMenu();
+        };
+      });
+    }
+
+    function hideContextMenu(){
+      contextMenu.style.display = "none";
+      contextPro = null;
+    }
+
+    document.addEventListener("click", hideContextMenu);
+    document.addEventListener("keydown", e => { if(e.key === "Escape") hideContextMenu(); });
+
+    function getDragAfterElement(container,y){
+      const els=[...container.querySelectorAll(".sequence-card[draggable='true']:not(.dragging)")];
+      return els.reduce((closest,child)=>{
+        const box=child.getBoundingClientRect(),offset=y-box.top-box.height/2;
+        if(offset<0&&offset>closest.offset)return{offset,element:child};
+        return closest;
+      },{offset:Number.NEGATIVE_INFINITY}).element;
+    }
+
+    function renderAll(){
+      renderRouteDropdown();
+      updateHeader();
+      renderPool();
+      renderSequence();
+    }
+
+    bucketSelect.onchange=()=>{
+      activeBucket=bucketSelect.value;
+      const c = buckets[activeBucket].center;
+      map.setView(c, 10);
+      renderAll();
+      setStatus(`Loaded bucket: ${buckets[activeBucket].label}.`);
+    };
+
+    routeSelect.onchange=()=>{
+      activeRoute = routeSelect.value || null;
+      renderAll();
+      if(activeRoute) setStatus(`Selected saved run: 📎 ${routes[activeRoute].label}.`);
+    };
+
+    searchBox.oninput=()=>renderPool();
+    autoSeqBtn.onclick=autoSequenceActiveRoute;
+    clipBtn.onclick=clipWorkingRun;
+    saveRunBtn.onclick=saveActiveRun;
+    unclipBtn.onclick=unclipActiveRun;
+    deleteRouteBtn.onclick=deleteActiveRun;
+
+    renderAll();
+  </script>
+</body>
+</html>

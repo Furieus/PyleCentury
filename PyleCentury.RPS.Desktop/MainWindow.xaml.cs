@@ -1,13 +1,12 @@
-using System.Net.Http;
-using System.Net.Http.Json;
+using System.IO;
 using System.Windows;
+using Microsoft.Web.WebView2.Core;
 using PyleCentury.Shared;
 
 namespace PyleCentury.RPS.Desktop;
 
 public partial class MainWindow : Window
 {
-    private readonly HttpClient _http = new();
     private readonly LaunchContext? _launchContext;
 
     public MainWindow()
@@ -17,57 +16,40 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        UserText.Text = $"{_launchContext.DisplayName} · {_launchContext.EmployeeId} · {_launchContext.TerminalCode}";
-        TerminalBox.Items.Add(_launchContext.TerminalCode);
-        TerminalBox.SelectedIndex = 0;
-
-        StatusText.Text = "RPS desktop shell loaded. Next build wires bucket data, locks, and drag/drop.";
+        Loaded += async (_, _) => await LoadMockupAsync();
     }
 
-    private void Refresh_Click(object sender, RoutedEventArgs e)
+    private async Task LoadMockupAsync()
     {
-        StatusText.Text = "Refresh requested. Bucket API wiring comes next.";
-    }
-
-    private async void TerminalBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        await LoadBucketsAsync();
-    }
-
-    private void BucketBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        LockBannerText.Text = "Bucket selected. Lock check wiring comes next.";
-    }
-
-    private async Task LoadBucketsAsync()
-    {
-        if (_launchContext is null || TerminalBox.SelectedItem is null) return;
-
         try
         {
-            var terminal = TerminalBox.SelectedItem.ToString();
-            var url = $"{_launchContext.ApiBaseUrl.TrimEnd('/')}/rps/terminals/{terminal}/buckets";
-            var buckets = await _http.GetFromJsonAsync<List<RpsBucketRow>>(url) ?? new();
+            await RpsWebView.EnsureCoreWebView2Async();
 
-            BucketBox.Items.Clear();
+            RpsWebView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+            RpsWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
+            RpsWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
 
-            foreach (var bucket in buckets)
+            var htmlPath = Path.Combine(AppContext.BaseDirectory, "Assets", "rps_mockup.html");
+
+            if (!File.Exists(htmlPath))
             {
-                BucketBox.Items.Add(bucket.RouteAreaName);
+                MessageBox.Show(
+                    $"RPS mockup file was not found:\n\n{htmlPath}",
+                    "RPS file missing",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
             }
 
-            StatusText.Text = $"Loaded {buckets.Count} RPS bucket(s).";
+            RpsWebView.Source = new Uri(htmlPath);
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Bucket load failed: {ex.Message}";
+            MessageBox.Show(
+                $"Could not load RPS mockup UI.\n\n{ex.Message}",
+                "RPS startup error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
-
-    private sealed record RpsBucketRow(
-        string Id,
-        string TerminalCode,
-        string RouteAreaName,
-        int DisplayOrder,
-        bool IsActive);
 }

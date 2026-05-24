@@ -186,7 +186,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Ellipse Width="14" Height="14" Fill="{Binding AccentBrush}" VerticalAlignment="Top" Margin="0,5,0,0"/>
+                <Ellipse Width="14" Height="14" Fill="{Binding AccentBrush}" VerticalAlignment="Center" Margin="0,5,0,0"/>
                 <StackPanel Grid.Column="1">
                     <TextBlock Text="{Binding Door}" FontWeight="SemiBold" Foreground="#E5E7EB"/>
                     <TextBlock Text="{Binding Message}" Foreground="#94A3B8" FontSize="12"/>
