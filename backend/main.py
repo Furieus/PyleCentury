@@ -543,6 +543,257 @@ def get_rps_bucket_snapshot(terminal_code: str, route_area_id: str):
     }
 
 
+
+
+# ============================================================
+# RPS Bucket Locks
+# ============================================================
+
+class RpsAcquireBucketLockRequest(BaseModel):
+    employeeNumber: str
+    clientId: Optional[str] = None
+    force: bool = False
+
+
+class RpsBucketLockResponse(BaseModel):
+    routeAreaId: str
+    terminalCode: str
+    locked: bool
+    readOnly: bool
+    lockOwnerName: Optional[str] = None
+    lockOwnerEmployeeNumber: Optional[str] = None
+    lockOwnerWindowsUsername: Optional[str] = None
+    expiresAt: Optional[str] = None
+    lockId: Optional[str] = None
+    message: Optional[str] = None
+
+
+def _get_employee_by_number(employee_number: str) -> dict:
+    rows = (
+        db().table("pc_employees")
+        .select("*")
+        .eq("employee_number", employee_number)
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Employee not found or inactive.")
+
+    return rows[0]
+
+
+def _active_bucket_lock(terminal_code: str, route_area_id: str) -> Optional[dict]:
+    rows = (
+        db().table("rps_bucket_locks")
+        .select("*, pc_employees(employee_number)")
+        .eq("terminal_code", terminal_code.upper())
+        .eq("route_area_id", route_area_id)
+        .gt("expires_at", utc_now_iso())
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    return rows[0] if rows else None
+
+
+@app.get("/rps/buckets/{terminal_code}/locks")
+def get_rps_bucket_locks(terminal_code: str):
+    # Returns active locks for a terminal so the bucket dropdown can show 👁/lock icons.
+    rows = (
+        db().table("rps_active_bucket_locks")
+        .select("*")
+        .eq("terminal_code", terminal_code.upper())
+        .execute()
+        .data
+        or []
+    )
+    return rows
+
+
+@app.get("/rps/buckets/{terminal_code}/{route_area_id}/lock", response_model=RpsBucketLockResponse)
+def get_rps_bucket_lock(terminal_code: str, route_area_id: str, employee_number: Optional[str] = None):
+    lock = _active_bucket_lock(terminal_code, route_area_id)
+
+    if not lock:
+        return RpsBucketLockResponse(
+            routeAreaId=route_area_id,
+            terminalCode=terminal_code.upper(),
+            locked=False,
+            readOnly=False,
+            message="Bucket is available."
+        )
+
+    owner_emp_number = None
+    if isinstance(lock.get("pc_employees"), dict):
+        owner_emp_number = lock["pc_employees"].get("employee_number")
+
+    is_owner = employee_number and owner_emp_number == employee_number
+
+    return RpsBucketLockResponse(
+        routeAreaId=route_area_id,
+        terminalCode=terminal_code.upper(),
+        locked=True,
+        readOnly=not is_owner,
+        lockOwnerName=lock.get("locked_by_display_name"),
+        lockOwnerEmployeeNumber=owner_emp_number,
+        lockOwnerWindowsUsername=lock.get("locked_by_windows_username"),
+        expiresAt=lock.get("expires_at"),
+        lockId=lock.get("id"),
+        message="You own this bucket lock." if is_owner else f"Bucket is currently being routed by {lock.get('locked_by_display_name')}."
+    )
+
+
+@app.post("/rps/buckets/{terminal_code}/{route_area_id}/lock", response_model=RpsBucketLockResponse)
+def acquire_rps_bucket_lock(terminal_code: str, route_area_id: str, req: RpsAcquireBucketLockRequest):
+    employee = _get_employee_by_number(req.employeeNumber)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=2)
+
+    existing = _active_bucket_lock(terminal_code, route_area_id)
+
+    if existing:
+        owner_emp_number = None
+        if isinstance(existing.get("pc_employees"), dict):
+            owner_emp_number = existing["pc_employees"].get("employee_number")
+
+        if owner_emp_number != req.employeeNumber and not req.force:
+            return RpsBucketLockResponse(
+                routeAreaId=route_area_id,
+                terminalCode=terminal_code.upper(),
+                locked=True,
+                readOnly=True,
+                lockOwnerName=existing.get("locked_by_display_name"),
+                lockOwnerEmployeeNumber=owner_emp_number,
+                lockOwnerWindowsUsername=existing.get("locked_by_windows_username"),
+                expiresAt=existing.get("expires_at"),
+                lockId=existing.get("id"),
+                message=f"Bucket is currently being routed by {existing.get('locked_by_display_name')}."
+            )
+
+    # Upsert lock. Unique key is terminal_code + route_area_id.
+    payload = {
+        "terminal_code": terminal_code.upper(),
+        "route_area_id": route_area_id,
+        "locked_by_employee_id": employee["id"],
+        "locked_by_display_name": employee["display_name"],
+        "locked_by_windows_username": employee.get("windows_username"),
+        "lock_mode": "routing",
+        "heartbeat_at": now.isoformat(),
+        "expires_at": expires.isoformat(),
+        "client_id": req.clientId
+    }
+
+    db().table("rps_bucket_locks").upsert(
+        payload,
+        on_conflict="terminal_code,route_area_id"
+    ).execute()
+
+    # Event for realtime clients watching the bucket list.
+    db().table("rps_bucket_events").insert({
+        "terminal_code": terminal_code.upper(),
+        "route_area_id": route_area_id,
+        "event_type": "bucket_locked",
+        "entity_type": "bucket_lock",
+        "payload": {
+            "lockedBy": employee["display_name"],
+            "employeeNumber": employee["employee_number"],
+            "expiresAt": expires.isoformat()
+        },
+        "created_by_employee_id": employee["id"]
+    }).execute()
+
+    lock = _active_bucket_lock(terminal_code, route_area_id)
+
+    return RpsBucketLockResponse(
+        routeAreaId=route_area_id,
+        terminalCode=terminal_code.upper(),
+        locked=True,
+        readOnly=False,
+        lockOwnerName=employee["display_name"],
+        lockOwnerEmployeeNumber=employee["employee_number"],
+        lockOwnerWindowsUsername=employee.get("windows_username"),
+        expiresAt=expires.isoformat(),
+        lockId=lock.get("id") if lock else None,
+        message="Bucket lock acquired."
+    )
+
+
+@app.post("/rps/buckets/{terminal_code}/{route_area_id}/lock/heartbeat", response_model=RpsBucketLockResponse)
+def heartbeat_rps_bucket_lock(terminal_code: str, route_area_id: str, req: RpsAcquireBucketLockRequest):
+    employee = _get_employee_by_number(req.employeeNumber)
+    lock = _active_bucket_lock(terminal_code, route_area_id)
+
+    if not lock:
+        return acquire_rps_bucket_lock(terminal_code, route_area_id, req)
+
+    if lock.get("locked_by_employee_id") != employee["id"]:
+        return RpsBucketLockResponse(
+            routeAreaId=route_area_id,
+            terminalCode=terminal_code.upper(),
+            locked=True,
+            readOnly=True,
+            lockOwnerName=lock.get("locked_by_display_name"),
+            lockOwnerWindowsUsername=lock.get("locked_by_windows_username"),
+            expiresAt=lock.get("expires_at"),
+            lockId=lock.get("id"),
+            message=f"Bucket is currently being routed by {lock.get('locked_by_display_name')}."
+        )
+
+    expires = datetime.now(timezone.utc) + timedelta(minutes=2)
+
+    db().table("rps_bucket_locks").update({
+        "heartbeat_at": utc_now_iso(),
+        "expires_at": expires.isoformat()
+    }).eq("id", lock["id"]).execute()
+
+    return RpsBucketLockResponse(
+        routeAreaId=route_area_id,
+        terminalCode=terminal_code.upper(),
+        locked=True,
+        readOnly=False,
+        lockOwnerName=employee["display_name"],
+        lockOwnerEmployeeNumber=employee["employee_number"],
+        lockOwnerWindowsUsername=employee.get("windows_username"),
+        expiresAt=expires.isoformat(),
+        lockId=lock["id"],
+        message="Bucket lock heartbeat updated."
+    )
+
+
+@app.delete("/rps/buckets/{terminal_code}/{route_area_id}/lock")
+def release_rps_bucket_lock(terminal_code: str, route_area_id: str, employee_number: str):
+    employee = _get_employee_by_number(employee_number)
+    lock = _active_bucket_lock(terminal_code, route_area_id)
+
+    if not lock:
+        return {"released": False, "message": "No active lock."}
+
+    if lock.get("locked_by_employee_id") != employee["id"] and int(employee.get("access_level") or 1) != 4:
+        raise HTTPException(status_code=403, detail="Only the lock owner or an admin can release this bucket lock.")
+
+    db().table("rps_bucket_locks").delete().eq("id", lock["id"]).execute()
+
+    db().table("rps_bucket_events").insert({
+        "terminal_code": terminal_code.upper(),
+        "route_area_id": route_area_id,
+        "event_type": "bucket_unlocked",
+        "entity_type": "bucket_lock",
+        "payload": {
+            "releasedBy": employee["display_name"],
+            "employeeNumber": employee["employee_number"]
+        },
+        "created_by_employee_id": employee["id"]
+    }).execute()
+
+    return {"released": True, "message": "Bucket lock released."}
+
+
+
 # Basic websocket placeholder for RPS desktop app.
 # Next step: wire this to rps_bucket_events broadcasts.
 active_rps_connections: dict[str, list[WebSocket]] = {}

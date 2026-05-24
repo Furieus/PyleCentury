@@ -91,3 +91,27 @@ Production data is not stored in local JSON. The apps use local config only for 
 ```
 
 All employees, terminals, access levels, dock layouts, and RPS data should live in Supabase Postgres through the Render backend.
+
+
+## RPS Bucket Locks
+
+RPS will support route bucket locks:
+
+```text
+- If a bucket is being routed by someone else, it shows a lock/eyes icon.
+- Opening that bucket puts the user into read-only mode.
+- Only the lock owner can route/move/remove stops.
+- Locks heartbeat and expire automatically if abandoned.
+```
+
+Schema:
+
+```text
+database/rps_bucket_locks.sql
+```
+
+Design notes:
+
+```text
+docs/RPS_BUCKET_LOCKS.md
+```

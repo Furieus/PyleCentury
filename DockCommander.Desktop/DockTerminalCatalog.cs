@@ -7,6 +7,17 @@ public sealed record DockTerminal(
     string DisplayName,
     bool HasDockLayout = false)
 {
+    public DockTerminal(
+        string code,
+        string name,
+        string state,
+        string displayName,
+        string? ignoredLegacyValue,
+        bool hasDockLayout = false)
+        : this(code, name, state, displayName, hasDockLayout)
+    {
+    }
+
     public string LayoutStatus => HasDockLayout ? "Mapped" : "No map";
     public string DisplayWithStatus => HasDockLayout ? DisplayName : $"{DisplayName}   (no dock map)";
 }
