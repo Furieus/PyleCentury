@@ -260,29 +260,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource AppCardStyle}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <StackPanel>
-                                <Border Width="72" Height="72" Background="#111827" BorderBrush="#22C55E" BorderThickness="2" CornerRadius="18" HorizontalAlignment="Left">
-                                    <TextBlock Text="⇄" Foreground="#22C55E" FontSize="40" FontWeight="Black" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="RPS" Foreground="#F8FAFC" FontSize="24" FontWeight="Bold" Margin="0,18,0,8"/>
-                                <TextBlock Text="Route planning, buckets, clipped runs, and live bucket locking."
-                                           Foreground="#94A3B8" FontSize="14" TextWrapping="Wrap"/>
-                            </StackPanel>
-
-                            <TextBlock Grid.Row="1" Text="Program-based RPS foundation. Bucket locks show who is currently routing."
-                                       Foreground="#CBD5E1" TextWrapping="Wrap" FontSize="13" VerticalAlignment="Center"/>
-
-                            <Button Grid.Row="2" x:Name="RpsButtonDuplicate2" Content="Open RPS" Style="{StaticResource LaunchButtonStyle}" Click="OpenRps_Click"/>
-                        </Grid>
-                    </Border>
+                    
                 </UniformGrid>
             </Grid>
         </Grid>

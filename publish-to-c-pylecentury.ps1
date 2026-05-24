@@ -27,10 +27,9 @@ dotnet publish ".\PyleCentury.Menu\PyleCentury.Menu.csproj" -c Release -r win-x6
 
 Copy-Item "$MenuTemp\*" $InstallRoot -Recurse -Force
 
-$menuExe = Join-Path $InstallRoot "PyleCentury.Menu.exe"
-$pyleMenuExe = Join-Path $InstallRoot "PyleMenu.exe"
-if (Test-Path $menuExe) {
-    Copy-Item $menuExe $pyleMenuExe -Force
+$oldMenuExe = Join-Path $InstallRoot "PyleCentury.Menu.exe"
+if (Test-Path $oldMenuExe) {
+    Remove-Item $oldMenuExe -Force
 }
 
 Write-Host "Publishing Dock Commander..." -ForegroundColor Yellow

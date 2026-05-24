@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -117,7 +118,7 @@ public partial class MainWindow : Window
             _bucketDisplays.Clear();
             BucketDropdownList.Items.Clear();
 
-            foreach (var bucket in buckets.OrderBy(b => b.DisplayOrder).ThenBy(b => b.RouteAreaName))
+            foreach (var bucket in buckets.OrderBy(b => b.DisplayOrder).ThenBy(b => b.DisplayName))
             {
                 var lockRow = locks.FirstOrDefault(l => string.Equals(l.RouteAreaId, bucket.Id, StringComparison.OrdinalIgnoreCase));
                 var display = new RpsBucketDisplay(bucket, lockRow);
@@ -187,7 +188,7 @@ public partial class MainWindow : Window
 
         var left = new TextBlock
         {
-            Text = display.Bucket.RouteAreaName,
+            Text = display.Bucket.DisplayName,
             Foreground = Brushes.White,
             FontWeight = FontWeights.Bold,
             FontSize = 13,
@@ -220,7 +221,7 @@ public partial class MainWindow : Window
 
             foreach (var l in locks)
             {
-                LocksList.Items.Add($"👁 {l.RouteAreaName} — {l.LockedByDisplayName}");
+                LocksList.Items.Add($"👁 {l.DisplayRouteName} — {l.LockedByDisplayName}");
             }
         }
         catch
@@ -250,7 +251,7 @@ public partial class MainWindow : Window
         try
         {
             _loadingLock = true;
-            StatusText.Text = $"Checking lock for {bucket.RouteAreaName}...";
+            StatusText.Text = $"Checking lock for {bucket.DisplayName}...";
 
             var terminal = _launchContext.HomeTerminalCode;
             var url = $"{_launchContext.ApiBaseUrl.TrimEnd('/')}/rps/buckets/{terminal}/{bucket.Id}/lock";
@@ -334,9 +335,9 @@ public partial class MainWindow : Window
         BucketStopsList.Items.Clear();
         ActiveRunList.Items.Clear();
 
-        BucketStopsList.Items.Add($"{bucket.RouteAreaName} · sample stop 1 · 3 bills · 1,250 lb");
-        BucketStopsList.Items.Add($"{bucket.RouteAreaName} · sample stop 2 · 1 bill · 420 lb");
-        BucketStopsList.Items.Add($"{bucket.RouteAreaName} · sample stop 3 · 5 bills · 2,800 lb");
+        BucketStopsList.Items.Add($"{bucket.DisplayName} · sample stop 1 · 3 bills · 1,250 lb");
+        BucketStopsList.Items.Add($"{bucket.DisplayName} · sample stop 2 · 1 bill · 420 lb");
+        BucketStopsList.Items.Add($"{bucket.DisplayName} · sample stop 3 · 5 bills · 2,800 lb");
 
         ActiveRunList.Items.Add(readOnly
             ? "Read-only: routing actions disabled because someone else owns the bucket."
@@ -358,7 +359,7 @@ public partial class MainWindow : Window
                 Environment.MachineName,
                 false));
 
-            StatusText.Text = $"Lock heartbeat OK: {_selectedBucket.RouteAreaName}";
+            StatusText.Text = $"Lock heartbeat OK: {_selectedBucket.DisplayName}";
         }
         catch (Exception ex)
         {
@@ -389,49 +390,55 @@ public partial class MainWindow : Window
     }
 
     private sealed record RpsBucketRow(
-        string Id,
-        string TerminalCode,
-        string RouteAreaName,
-        int DisplayOrder,
-        bool IsActive);
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("terminal_code")] string TerminalCode,
+        [property: JsonPropertyName("route_area_name")] string? RouteAreaName,
+        [property: JsonPropertyName("display_order")] int DisplayOrder,
+        [property: JsonPropertyName("is_active")] bool IsActive)
+    {
+        public string DisplayName => !string.IsNullOrWhiteSpace(RouteAreaName) ? RouteAreaName! : Id;
+    }
 
     private sealed record RpsActiveLockRow(
-        string Id,
-        string TerminalCode,
-        string RouteAreaId,
-        string RouteAreaName,
-        string LockedByEmployeeId,
-        string LockedByDisplayName,
-        string? LockedByWindowsUsername,
-        string LockMode,
-        string AcquiredAt,
-        string HeartbeatAt,
-        string ExpiresAt,
-        string? ClientId);
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("terminal_code")] string TerminalCode,
+        [property: JsonPropertyName("route_area_id")] string RouteAreaId,
+        [property: JsonPropertyName("route_area_name")] string? RouteAreaName,
+        [property: JsonPropertyName("locked_by_employee_id")] string LockedByEmployeeId,
+        [property: JsonPropertyName("locked_by_display_name")] string LockedByDisplayName,
+        [property: JsonPropertyName("locked_by_windows_username")] string? LockedByWindowsUsername,
+        [property: JsonPropertyName("lock_mode")] string LockMode,
+        [property: JsonPropertyName("acquired_at")] string AcquiredAt,
+        [property: JsonPropertyName("heartbeat_at")] string HeartbeatAt,
+        [property: JsonPropertyName("expires_at")] string ExpiresAt,
+        [property: JsonPropertyName("client_id")] string? ClientId)
+    {
+        public string DisplayRouteName => !string.IsNullOrWhiteSpace(RouteAreaName) ? RouteAreaName! : RouteAreaId;
+    }
 
     private sealed record RpsBucketLockResponse(
-        string RouteAreaId,
-        string TerminalCode,
-        bool Locked,
-        bool ReadOnly,
-        string? LockOwnerName,
-        string? LockOwnerEmployeeNumber,
-        string? LockOwnerWindowsUsername,
-        string? ExpiresAt,
-        string? LockId,
-        string? Message);
+        [property: JsonPropertyName("routeAreaId")] string RouteAreaId,
+        [property: JsonPropertyName("terminalCode")] string TerminalCode,
+        [property: JsonPropertyName("locked")] bool Locked,
+        [property: JsonPropertyName("readOnly")] bool ReadOnly,
+        [property: JsonPropertyName("lockOwnerName")] string? LockOwnerName,
+        [property: JsonPropertyName("lockOwnerEmployeeNumber")] string? LockOwnerEmployeeNumber,
+        [property: JsonPropertyName("lockOwnerWindowsUsername")] string? LockOwnerWindowsUsername,
+        [property: JsonPropertyName("expiresAt")] string? ExpiresAt,
+        [property: JsonPropertyName("lockId")] string? LockId,
+        [property: JsonPropertyName("message")] string? Message);
 
     private sealed record RpsLockRequest(
-        string EmployeeNumber,
-        string? ClientId,
-        bool Force);
+        [property: JsonPropertyName("employeeNumber")] string EmployeeNumber,
+        [property: JsonPropertyName("clientId")] string? ClientId,
+        [property: JsonPropertyName("force")] bool Force);
 
     private sealed class RpsBucketDisplay
     {
         public RpsBucketRow Bucket { get; }
         public RpsActiveLockRow? Lock { get; }
         public bool IsLocked => Lock is not null;
-        public string DisplayText => Lock is null ? Bucket.RouteAreaName : $"👁 {Bucket.RouteAreaName} — {Lock.LockedByDisplayName}";
+        public string DisplayText => Lock is null ? Bucket.DisplayName : $"👁 {Bucket.DisplayName} — {Lock.LockedByDisplayName}";
 
         public RpsBucketDisplay(RpsBucketRow bucket, RpsActiveLockRow? lockRow)
         {

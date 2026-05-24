@@ -161,7 +161,62 @@ public partial class MainWindow : Window
 
     private async void OpenEmployeeManager_Click(object sender, RoutedEventArgs e)
     {
-        await LaunchAppAsync("Employee Manager", "Admin", "PyleCentury.Admin.Desktop", "PyleCentury.Admin.exe");
+        await LaunchEmployeeManagerAsync();
+    }
+
+
+    private async Task LaunchEmployeeManagerAsync()
+    {
+        if (_profile is null)
+        {
+            MessageBox.Show("No employee profile is loaded for this Windows username.",
+                "Employee profile required", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_profile.AccessLevel != 4)
+        {
+            MessageBox.Show("Only Level 4 admins can open Employee Manager.",
+                "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var token = await CreateLaunchSessionAsync("Admin");
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            MessageBox.Show("Could not create an Admin launch session for Employee Manager.",
+                "Launch session failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var pathToLaunch =
+            FindAppExecutable("PyleCentury.Admin.Desktop", "PyleCentury.Admin.exe") ??
+            FindAppExecutable("PyleCentury.Admin.Desktop", "PyleCentury.Admin.Desktop.exe");
+
+        if (string.IsNullOrWhiteSpace(pathToLaunch))
+        {
+            SetStatus("Employee Manager executable not found. Build/publish Admin first.", true);
+
+            MessageBox.Show(
+                "Employee Manager was not found.\n\nExpected one of:\n- PyleCentury.Admin.exe\n- PyleCentury.Admin.Desktop.exe\n\nRun publish-all-windows-release.bat, then try again.",
+                "Application not found",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+
+            return;
+        }
+
+        var args = BuildLaunchArgs(token, "Admin");
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = pathToLaunch,
+            Arguments = args,
+            WorkingDirectory = Path.GetDirectoryName(pathToLaunch)!,
+            UseShellExecute = true
+        });
+
+        SetStatus($"Launched Employee Manager for {UserText.Text}.");
     }
 
     private async Task LaunchAppAsync(string appName, string moduleCode, string projectFolderName, string executableName)
