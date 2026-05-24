@@ -34,6 +34,7 @@ if exist "%INSTALL_ROOT%\_menu_publish" rmdir /s /q "%INSTALL_ROOT%\_menu_publis
 if exist "%APPS_ROOT%\DockCommander" rmdir /s /q "%APPS_ROOT%\DockCommander"
 if exist "%APPS_ROOT%\Billing" rmdir /s /q "%APPS_ROOT%\Billing"
 if exist "%APPS_ROOT%\Admin" rmdir /s /q "%APPS_ROOT%\Admin"
+if exist "%APPS_ROOT%\RPS" rmdir /s /q "%APPS_ROOT%\RPS"
 
 echo.
 echo Publishing Menu...
@@ -61,6 +62,11 @@ if errorlevel 1 goto failed
 echo.
 echo Publishing Employee Manager...
 dotnet publish ".\PyleCentury.Admin.Desktop\PyleCentury.Admin.Desktop.csproj" -c Release -r win-x64 --self-contained false -o "%APPS_ROOT%\Admin"
+if errorlevel 1 goto failed
+
+echo.
+echo Publishing RPS...
+dotnet publish ".\PyleCentury.RPS.Desktop\PyleCentury.RPS.Desktop.csproj" -c Release -r win-x64 --self-contained false -o "%APPS_ROOT%\RPS"
 if errorlevel 1 goto failed
 
 echo.

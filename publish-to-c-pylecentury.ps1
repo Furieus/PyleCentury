@@ -20,6 +20,7 @@ if (Test-Path $MenuTemp) { Remove-Item $MenuTemp -Recurse -Force }
 if (Test-Path (Join-Path $AppsRoot "DockCommander")) { Remove-Item (Join-Path $AppsRoot "DockCommander") -Recurse -Force }
 if (Test-Path (Join-Path $AppsRoot "Billing")) { Remove-Item (Join-Path $AppsRoot "Billing") -Recurse -Force }
 if (Test-Path (Join-Path $AppsRoot "Admin")) { Remove-Item (Join-Path $AppsRoot "Admin") -Recurse -Force }
+if (Test-Path (Join-Path $AppsRoot "RPS")) { Remove-Item (Join-Path $AppsRoot "RPS") -Recurse -Force }
 
 Write-Host "Publishing Menu..." -ForegroundColor Yellow
 dotnet publish ".\PyleCentury.Menu\PyleCentury.Menu.csproj" -c Release -r win-x64 --self-contained false -o $MenuTemp
@@ -40,6 +41,9 @@ dotnet publish ".\PyleCentury.Billing.Desktop\PyleCentury.Billing.Desktop.csproj
 
 Write-Host "Publishing Employee Manager..." -ForegroundColor Yellow
 dotnet publish ".\PyleCentury.Admin.Desktop\PyleCentury.Admin.Desktop.csproj" -c Release -r win-x64 --self-contained false -o (Join-Path $AppsRoot "Admin")
+
+Write-Host "Publishing RPS..." -ForegroundColor Yellow
+dotnet publish ".\PyleCentury.RPS.Desktop\PyleCentury.RPS.Desktop.csproj" -c Release -r win-x64 --self-contained false -o (Join-Path $AppsRoot "RPS")
 
 $config = @{
     InstallRoot = $InstallRoot

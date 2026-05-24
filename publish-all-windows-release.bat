@@ -24,6 +24,12 @@ call publish-windows-release.bat
 popd
 
 echo.
+echo Publishing RPS...
+pushd PyleCentury.RPS.Desktop
+call publish-windows-release.bat
+popd
+
+echo.
 echo Publishing Pyle Menu...
 pushd PyleCentury.Menu
 call publish-windows-release.bat

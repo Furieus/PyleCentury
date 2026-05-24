@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text;
 using System.Windows;
 using System.Windows.Media.Animation;
 using Microsoft.Extensions.Configuration;
@@ -41,7 +42,7 @@ public partial class MainWindow : Window
             SetStatus("Loading employee profile...");
             SetModuleButtons(false);
 
-            var url = $"{_apiBaseUrl.TrimEnd('/')}/auth/windows-profile?windows_username={Uri.EscapeDataString(WindowsIdentityHelper.WindowsUserName)}";
+            var url = $"{_apiBaseUrl.TrimEnd(\'/\')}/auth/windows-profile?windows_username={Uri.EscapeDataString(WindowsIdentityHelper.WindowsUserName)}";
             _profile = await _httpClient.GetFromJsonAsync<EmployeeProfile>(url);
 
             if (_profile is null)
@@ -95,13 +96,11 @@ public partial class MainWindow : Window
         {
             DockCommanderButton.IsEnabled = false;
             BillingButton.IsEnabled = false;
-            RpsButton.IsEnabled = false;
             return;
         }
 
         DockCommanderButton.IsEnabled = enabled && _profile.AccessLevel is >= 1 and <= 4;
         BillingButton.IsEnabled = enabled && (_profile.AccessLevel == 3 || _profile.AccessLevel == 4);
-        RpsButton.IsEnabled = enabled && _profile.AccessLevel == 4;
     }
 
     private void Admin_Click(object sender, RoutedEventArgs e)
@@ -146,22 +145,29 @@ public partial class MainWindow : Window
 
     private async void OpenDockCommander_Click(object sender, RoutedEventArgs e)
     {
-        await LaunchAppAsync("Dock Commander", "DockCommander", "DockCommander.Desktop", "DockCommander.exe");
+        await LaunchAppAsync(
+            "Dock Commander",
+            "DockCommander",
+            "DockCommander.Desktop",
+            "DockCommander.exe",
+            "DockCommander.Desktop.csproj");
     }
 
     private async void OpenBilling_Click(object sender, RoutedEventArgs e)
     {
-        await LaunchAppAsync("Billing", "Billing", "PyleCentury.Billing.Desktop", "PyleCentury.Billing.exe");
-    }
-
-    private async void OpenRps_Click(object sender, RoutedEventArgs e)
-    {
-        await LaunchAppAsync("RPS", "RPS", "PyleCentury.RPS.Desktop", "PyleCentury.RPS.exe");
+        await LaunchAppAsync(
+            "Billing",
+            "Billing",
+            "PyleCentury.Billing.Desktop",
+            "PyleCentury.Billing.exe",
+            "PyleCentury.Billing.Desktop.csproj");
     }
 
     private void OpenEmployeeManager_Click(object sender, RoutedEventArgs e)
     {
-        var pathToLaunch = FindAppExecutable("PyleCentury.Admin.Desktop", "PyleCentury.Admin.exe");
+        var pathToLaunch = FindAppExecutable(
+            "PyleCentury.Admin.Desktop",
+            "PyleCentury.Admin.exe");
 
         if (string.IsNullOrWhiteSpace(pathToLaunch))
         {
@@ -183,7 +189,7 @@ public partial class MainWindow : Window
         SetStatus("Opened Employee Manager.");
     }
 
-    private async Task LaunchAppAsync(string appName, string moduleCode, string projectFolderName, string executableName)
+    private async Task LaunchAppAsync(string appName, string moduleCode, string projectFolderName, string executableName, string projectFileName)
     {
         if (_profile is null)
         {
@@ -325,10 +331,7 @@ public partial class MainWindow : Window
         return string.Join(" ", parts.Select(p => $"--{p.Item1} {Quote(p.Item2)}"));
     }
 
-    private static string Quote(string value)
-    {
-        return "\"" + value.Replace("\"", "\\\"") + "\"";
-    }
+    private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
 
     private string? FindAppExecutable(string projectFolderName, string executableName)
     {
@@ -358,7 +361,6 @@ public partial class MainWindow : Window
             "DockCommander.Desktop" => "DockCommander",
             "PyleCentury.Billing.Desktop" => "Billing",
             "PyleCentury.Admin.Desktop" => "Admin",
-            "PyleCentury.RPS.Desktop" => "RPS",
             _ => projectFolderName
         };
     }
