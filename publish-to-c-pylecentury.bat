@@ -44,9 +44,9 @@ if errorlevel 1 goto failed
 echo Copying Menu files to root...
 xcopy "%INSTALL_ROOT%\_menu_publish\*" "%INSTALL_ROOT%\" /E /Y /I >nul
 
-REM Menu now builds directly as PyleMenu.exe. Remove stale old launcher if present.
+REM Rename menu exe to PyleMenu.exe for a clean launcher entry.
 if exist "%INSTALL_ROOT%\PyleCentury.Menu.exe" (
-    del /q "%INSTALL_ROOT%\PyleCentury.Menu.exe"
+    copy /Y "%INSTALL_ROOT%\PyleCentury.Menu.exe" "%INSTALL_ROOT%\PyleMenu.exe" >nul
 )
 
 echo.

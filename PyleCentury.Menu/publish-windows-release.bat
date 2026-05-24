@@ -17,8 +17,6 @@ dotnet publish PyleCentury.Menu.csproj ^
   -o ".\release\win-x64"
 
 echo.
-if exist ".\release\win-x64\PyleCentury.Menu.exe" del /q ".\release\win-x64\PyleCentury.Menu.exe"
-
 echo Release output:
 echo %cd%\release\win-x64
 echo.

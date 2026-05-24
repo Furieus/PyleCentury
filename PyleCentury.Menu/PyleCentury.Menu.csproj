@@ -7,8 +7,8 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Resources\PyleMenu.ico</ApplicationIcon>
-    <AssemblyName>PyleMenu</AssemblyName>
-    <Product>Pyle Menu</Product>
+    <AssemblyName>PyleCentury.Menu</AssemblyName>
+    <Product>Pyle Century Menu</Product>
     <Company>Pyle Century</Company>
     <Authors>Pyle Century</Authors>
   </PropertyGroup>
